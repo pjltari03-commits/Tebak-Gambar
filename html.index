@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Match Game - Level Up</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card {
+            perspective: 1000px;
+            cursor: pointer;
+        }
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .card-front {
+            background-color: #3b82f6; /* Blue 500 */
+            color: white;
+            font-size: 2rem;
+        }
+        .card-back {
+            background-color: white;
+            transform: rotateY(180deg);
+            font-size: 2.5rem;
+            border: 2px solid #3b82f6;
+        }
+        .matched .card-inner {
+            animation: pulse 0.5s ease-in-out;
+        }
+        @keyframes pulse {
+            0% { transform: rotateY(180deg) scale(1); }
+            50% { transform: rotateY(180deg) scale(1.1); }
+            100% { transform: rotateY(180deg) scale(1); }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center py-8 px-4 font-sans">
+
+    <!-- Header & Info -->
+    <div class="max-w-md w-full text-center mb-8">
+        <h1 class="text-3xl font-bold text-slate-800 mb-2">Tebak Pasangan Kartu</h1>
+        <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm">
+            <div>
+                <p class="text-sm text-slate-500 uppercase font-semibold">Level</p>
+                <p id="level-display" class="text-2xl font-bold text-blue-600">1</p>
+            </div>
+            <div>
+                <p class="text-sm text-slate-500 uppercase font-semibold">Langkah</p>
+                <p id="moves-display" class="text-2xl font-bold text-slate-700">0</p>
+            </div>
+            <div>
+                <p class="text-sm text-slate-500 uppercase font-semibold">Pasangan</p>
+                <p id="matches-display" class="text-2xl font-bold text-green-600">0/5</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Board -->
+    <div id="game-board" class="grid grid-cols-4 gap-3 max-w-2xl w-full">
+        <!-- Kartu akan di-render di sini oleh JavaScript -->
+    </div>
+
+    <!-- Overlay Pesan -->
+    <div id="message-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl">
+            <h2 id="overlay-title" class="text-3xl font-bold text-slate-800 mb-2">Luar Biasa!</h2>
+            <p id="overlay-message" class="text-slate-600 mb-6">Kamu berhasil menyelesaikan level ini.</p>
+            <button id="next-level-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors shadow-lg active:scale-95">
+                Lanjut ke Level Berikutnya
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Daftar emoji yang akan digunakan sebagai gambar di kartu
+        const emojiPool = ['🍎', '🍌', '🍇', '🍉', '🍓', '🍒', '🍍', '🥝', '🥑', '🌽', '🥕', '🍆', '🍔', '🍕', '🍦', '🍩', '⚽', '🏀', '🎸', '🎨', '🚀', '🌈', '🐱', '🐶'];
+
+        let level = 1;
+        let moves = 0;
+        let matches = 0;
+        let totalPairs = 5; // Level 1 dimulai dengan 5 pasang (10 kartu)
+        let flippedCards = [];
+        let isLockBoard = false;
+
+        const board = document.getElementById('game-board');
+        const levelDisplay = document.getElementById('level-display');
+        const movesDisplay = document.getElementById('moves-display');
+        const matchesDisplay = document.getElementById('matches-display');
+        const overlay = document.getElementById('message-overlay');
+        const nextBtn = document.getElementById('next-level-btn');
+
+        function initGame() {
+            // Reset state
+            moves = 0;
+            matches = 0;
+            flippedCards = [];
+            isLockBoard = false;
+            
+            // Level 1: 5 pasang, Level 2: 6 pasang, dst (max sesuai emojiPool)
+            totalPairs = Math.min(4 + level, emojiPool.length);
+            
+            // Atur grid berdasarkan jumlah kartu
+            const totalCards = totalPairs * 2;
+            if (totalCards > 16) board.classList.replace('grid-cols-4', 'grid-cols-5');
+            if (totalCards > 25) board.classList.replace('grid-cols-5', 'grid-cols-6');
+
+            updateDisplay();
+            createBoard();
+        }
+
+        function createBoard() {
+            board.innerHTML = '';
+            
+            // Pilih emoji secara acak
+            const shuffledEmojis = [...emojiPool].sort(() => 0.5 - Math.random());
+            const selectedEmojis = shuffledEmojis.slice(0, totalPairs);
+            
+            // Gandakan untuk pasangan dan acak lagi
+            const gameIcons = [...selectedEmojis, ...selectedEmojis].sort(() => 0.5 - Math.random());
+
+            gameIcons.forEach((emoji, index) => {
+                const card = document.createElement('div');
+                card.classList.add('card', 'h-24', 'sm:h-32');
+                card.dataset.icon = emoji;
+                
+                card.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-front">?</div>
+                        <div class="card-back">${emoji}</div>
+                    </div>
+                `;
+                
+                card.addEventListener('click', () => flipCard(card));
+                board.appendChild(card);
+            });
+        }
+
+        function flipCard(card) {
+            if (isLockBoard || card.classList.contains('flipped') || card.classList.contains('matched')) return;
+
+            card.classList.add('flipped');
+            flippedCards.push(card);
+
+            if (flippedCards.length === 2) {
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            moves++;
+            updateDisplay();
+            isLockBoard = true;
+
+            const [card1, card2] = flippedCards;
+            const isMatch = card1.dataset.icon === card2.dataset.icon;
+
+            if (isMatch) {
+                disableCards();
+            } else {
+                unflipCards();
+            }
+        }
+
+        function disableCards() {
+            flippedCards[0].classList.add('matched');
+            flippedCards[1].classList.add('matched');
+            matches++;
+            updateDisplay();
+            
+            resetSelection();
+            
+            if (matches === totalPairs) {
+                setTimeout(showWinMessage, 600);
+            }
+        }
+
+        function unflipCards() {
+            setTimeout(() => {
+                flippedCards[0].classList.remove('flipped');
+                flippedCards[1].classList.remove('flipped');
+                resetSelection();
+            }, 1000);
+        }
+
+        function resetSelection() {
+            flippedCards = [];
+            isLockBoard = false;
+        }
+
+        function updateDisplay() {
+            levelDisplay.textContent = level;
+            movesDisplay.textContent = moves;
+            matchesDisplay.textContent = `${matches}/${totalPairs}`;
+        }
+
+        function showWinMessage() {
+            overlay.classList.remove('hidden');
+            document.getElementById('overlay-title').textContent = "Level " + level + " Selesai!";
+            document.getElementById('overlay-message').textContent = `Kamu menyelesaikannya dalam ${moves} langkah.`;
+        }
+
+        nextBtn.addEventListener('click', () => {
+            level++;
+            overlay.classList.add('hidden');
+            initGame();
+        });
+
+        // Jalankan game pertama kali
+        window.onload = initGame;
+    </script>
+</body>
+</html>
